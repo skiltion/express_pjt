@@ -10,7 +10,14 @@ app.get('/ping', (req, res) => {
     res.send('pong');
   });
 
+app.get('/tic', (req, res) => {
+    res.send('tactoe');
+  });
+
 app.get('/asdf', (req, res) => {
     res.send('qwerty');
   });
-  
+
+app.get('/abc', (req, res) => {
+    res.send('가나다');
+  });
