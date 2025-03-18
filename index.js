@@ -165,5 +165,5 @@ app.get('/users', (req,res) => [
 ])
 
 app.get('/articles', (req,res) => [
-    res.json(articles)
+    res.send(articles)
 ])
