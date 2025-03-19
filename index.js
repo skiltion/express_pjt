@@ -229,3 +229,15 @@ app.delete('/articles/:id', (req, res) => {
     return res.json({ error: "Article not found" });
   }
 });
+
+app.put('/articles/:id', (req, res)=>{
+  let id = req.params.id
+  let data = req.body
+  console.log(data)
+
+  articles[id] = data
+
+  console.log(id)
+
+  res.send('ok')
+})
