@@ -1,5 +1,10 @@
 const express = require('express');
+const cors = require('cors');  // cors 패키지 추가
 const app = express();
+
+app.use(cors());  // CORS 미들웨어 사용
+app.use(express.json());
+
 const PORT = 3000;
 
 const users =  [
@@ -173,23 +178,54 @@ app.get ('/users/:id', (req,res) =>{
   let user_len = users.length
   
   for(let i = 0; i < user_len; i++){
-    if (users[i].id == id)[
-      res.send(users[i])
-    ]
+    if (users[i].id == id){
+      return res.send(users[i])
+    }
   }
   
-  res.send('404 not found')
+  return res.send('404 not found')
 })
 
 app.get('/articles', (req,res) => {
     res.send(articles)
-}) 
+})
+
+app.post('/articles', (req, res)=>{
+  const data = req.body
+
+  let lastId = articles[articles.length - 1].id
+  data.id = lastId + 1
+
+  const now = new Date().toISOString().slice(0, 19) + 'Z';
+  data.date = now;
+
+  articles.push(data)
+  return res.json("ok")
+})
 
 app.get('/articles/:id', (req, res) => {
 
   let article_id = req.params.id
 
-  let article = articles[article_id - 1]
+  for(let i = 0; i < articles.length; i++){
+    if (articles[i].id == article_id){
+      return res.json(articles[i])
+    }
+  }
 
-  res.json(article);
+  return res.json('404 not found')
 })
+
+app.delete('/articles/:id', (req, res) => {
+  const articleId = req.params.id;
+  const index = articles.findIndex(article => article.id == articleId);
+
+  if (index !== -1) {
+    // 게시글이 존재하면 삭제
+    articles.splice(index, 1);
+    return res.json({ message: "Article deleted successfully" });
+  } else {
+    // 게시글이 존재하지 않으면 에러 메시지 반환
+    return res.json({ error: "Article not found" });
+  }
+});
