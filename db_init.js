@@ -37,6 +37,20 @@ function initDB() {
       console.log("테이블 준비 완료(comments)");
     }
   });
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT,
+      password TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+      if (err) {
+        console.error("테이블 생성 에러:", err);
+      } else {
+        console.log("테이블 준비 완료(users)");
+      }
+    });
 }
 
 initDB();
