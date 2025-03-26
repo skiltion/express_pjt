@@ -6,32 +6,41 @@ app.use(cors());
 // json으로 된 post의 바디를 읽기 위해 필요
 app.use(express.json())
 const jwt = require('jsonwebtoken');
-const SECRET_KEY = "your_secret_key"; // 실제 서비스에선 더 복잡하고 안전하게!
 const PORT = 3000;
+
+require('dotenv').config();
+const secretKey = process.env.SECRET_KEY;
 
 //db 연결
 const sqlite3 = require('sqlite3').verbose();
 
 const db = new sqlite3.Database('./database.db');
 
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(401).send('인증 헤더 없음');
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  jwt.verify(token, secretKey, (err, decoded) => {
+    if (err) {
+      return res.status(401).send('토큰 검증 실패');
+    }
+
+    // 인증 성공 시 decoded 안에 있는 사용자 정보 req에 저장
+    req.user = decoded;
+    next(); // 다음 미들웨어 or 라우터로
+  });
+}
+
 app.listen(PORT, () => {
     console.log(`서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
   });
   
-  app.post("/articles", (req, res) => {
-    // 토큰 확인
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: "인증 토큰이 필요합니다." });
-    }
-  
-    const token = authHeader.split(' ')[1];
-    jwt.verify(token, SECRET_KEY, (err, decoded) => {
-      if (err) {
-        return res.status(401).json({ error: "유효하지 않은 토큰입니다." });
-      }
-  
-      // 인증 성공 -> 게시글 작성 처리
+  app.post("/articles", authMiddleware, (req, res) => {
       const { title, content } = req.body;
   
       db.run(
@@ -45,12 +54,6 @@ app.listen(PORT, () => {
         }
       );
     });
-  });
-
-// 커밋 한번해주세요
-
-// 전체 아티클 리스트 주는 api를 만들어주세요
-// GET : /articles
 
 app.get('/articles',(req, res)=>{
 
@@ -63,8 +66,7 @@ app.get('/articles',(req, res)=>{
 
 })
 
-// 개별 아티클을 주는 api를 만들어주세요 
-// GET : /articles/:id
+
 app.get('/articles/:id', (req, res)=>{
     let id = req.params.id
 
@@ -81,7 +83,7 @@ app.get('/articles/:id', (req, res)=>{
 })
 
 
-app.delete("/articles/:id", (req, res)=>{
+app.delete("/articles/:id", authMiddleware, (req, res)=>{
   const id = req.params.id
 
 
@@ -97,7 +99,7 @@ app.delete("/articles/:id", (req, res)=>{
 
 })
 
-app.put('/articles/:id', (req, res)=>{
+app.put('/articles/:id', authMiddleware, (req, res)=>{
   let id = req.params.id
   // let title = req.body.title
   // let content = req.body.content
@@ -136,7 +138,7 @@ app.post('/posttest', (req, res)=>{
 
 
 // POST /articles/:id/comments 라우트
-app.post("/articles/:id/comments", (req, res) => {
+app.post("/articles/:id/comments", authMiddleware, (req, res) => {
   const articleId = req.params.id;
   const content = req.body.content;
   
@@ -228,7 +230,7 @@ app.post('/login', (req, res) => {
       // JWT 토큰 생성
       const token = jwt.sign(
         { id: user.id, email: user.email }, // payload
-        SECRET_KEY,                         // 비밀 키
+        secretKey,                         // 비밀 키
         { expiresIn: '1h' }                 // 옵션: 1시간 유효
       );
 
@@ -246,7 +248,7 @@ app.get('/logintest', (req, res)=>{
   let token = req.headers.authorization.split(' ')[1]
 
 
-  jwt.verify(token, SECRET_KEY, (err, decoded)=>{
+  jwt.verify(token, secretKey, (err, decoded)=>{
     if(err){
       return res.send("에러!!!")
     }
