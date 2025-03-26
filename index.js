@@ -41,63 +41,83 @@ app.listen(PORT, () => {
   });
   
   app.post("/articles", authMiddleware, (req, res) => {
-      const { title, content } = req.body;
+    const { title, content } = req.body;
+    const userId = req.user.id;  // 인증된 사용자 ID
   
-      db.run(
-        `INSERT INTO articles (title, content) VALUES (?, ?)`,
-        [title, content],
-        function (err) {
-          if (err) {
-            return res.status(500).json({ error: err.message });
-          }
-          res.json({ id: this.lastID, title, content });
-        }
-      );
-    });
-
-app.get('/articles',(req, res)=>{
-
-    db.all("SELECT * FROM articles", [], (err, rows) => {
+    // 게시글을 users의 id와 함께 저장
+    db.run(
+      "INSERT INTO articles (title, content, user_id) VALUES (?, ?, ?)",
+      [title, content, userId],
+      function (err) {
         if (err) {
           return res.status(500).json({ error: err.message });
         }
-        res.json(rows);  // returns the list of articles
-      });
+        res.json({ id: this.lastID, title, content, user_id: userId });
+      }
+    );
+  });
 
-})
-
-
-app.get('/articles/:id', (req, res)=>{
-    let id = req.params.id
-
-    db.get("SELECT * FROM articles WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-        }
-        if (!row) {
-            return res.status(404).json({ message: "Article not found" });
-        }
-        res.json(row);  // returns the article with the given id
+  app.get('/articles', (req, res) => {
+    db.all("SELECT articles.*, users.email FROM articles JOIN users ON articles.user_id = users.id", [], (err, rows) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(rows);  // 게시글 목록과 함께 사용자 이메일도 반환
     });
-
-})
-
-
-app.delete("/articles/:id", authMiddleware, (req, res)=>{
-  const id = req.params.id
+  });
 
 
-  const sql = 'DELETE FROM articles WHERE id = ?';
-  db.run(sql, id, function(err) {
+app.get('/articles/:id', (req, res) => {
+  let id = req.params.id;
+
+  db.get("SELECT articles.*, users.email FROM articles JOIN users ON articles.user_id = users.id WHERE articles.id = ?", [id], (err, row) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    if (!row) {
+      return res.status(404).json({ message: "Article not found" });
+    }
+    res.json(row);  // 게시글과 사용자 이메일 함께 반환
+  });
+});
+
+app.delete("/articles/:id", authMiddleware, (req, res) => {
+  const id = req.params.id;
+  const requestUserId = req.user.id;  // 인증된 사용자의 ID
+  
+  // 게시글 작성자의 user_id를 확인하기 위한 SQL
+  const checkAuthorSql = 'SELECT user_id FROM articles WHERE id = ?';
+
+  db.get(checkAuthorSql, [id], (err, row) => {
     if (err) {
       console.error(err.message);
       return res.status(500).json({ error: err.message });
     }
-    // this.changes는 영향을 받은 행의 수
-    res.json({ message: `총 ${this.changes}개의 아티클이 삭제되었습니다.` });
-  });
 
-})
+    if (!row) {
+      return res.status(404).json({ message: '게시글을 찾을 수 없습니다.' });
+    }
+
+    const articleUserId = row.user_id;  // 게시글 작성자의 ID
+
+    // 요청한 사용자 ID와 게시글 작성자 ID가 일치하지 않으면 권한이 없다고 응답
+    if (requestUserId !== articleUserId) {
+      return res.status(403).json({ message: '권한이 없습니다.' });
+    }
+
+    // 요청한 사용자와 게시글 작성자가 일치하면 삭제 진행
+    const sql = 'DELETE FROM articles WHERE id = ?';
+    db.run(sql, id, function (err) {
+      if (err) {
+        console.error(err.message);
+        return res.status(500).json({ error: err.message });
+      }
+
+      // this.changes는 영향을 받은 행의 수
+      res.json({ message: `총 ${this.changes}개의 아티클이 삭제되었습니다.` });
+    });
+  });
+});
 
 app.put('/articles/:id', authMiddleware, (req, res)=>{
   let id = req.params.id
@@ -137,33 +157,43 @@ app.post('/posttest', (req, res)=>{
 })
 
 
-// POST /articles/:id/comments 라우트
 app.post("/articles/:id/comments", authMiddleware, (req, res) => {
   const articleId = req.params.id;
   const content = req.body.content;
-  
-  // 현재 날짜/시간을 ISO 문자열 형태로 생성
+  const userId = req.user.id;  // 인증된 사용자 ID
   const createdAt = new Date().toISOString();
 
-  // comments 테이블에 INSERT 쿼리 실행
-  const sql = `INSERT INTO comments (content, created_at, article_id) VALUES (?, ?, ?)`;
-  db.run(sql, [content, createdAt, articleId], function(err) {
+  const sql = "INSERT INTO comments (content, created_at, article_id, user_id) VALUES (?, ?, ?, ?)";
+  db.run(sql, [content, createdAt, articleId, userId], function (err) {
     if (err) {
       console.error("댓글 삽입 중 에러 발생:", err);
       return res.status(500).json({ error: "댓글을 등록하는데 실패했습니다." });
     }
 
-    // 삽입된 댓글의 id는 this.lastID에 저장됨.
     res.status(201).json({
       id: this.lastID,
       content: content,
       created_at: createdAt,
-      article_id: articleId
+      article_id: articleId,
+      user_id: userId
     });
   });
 });
 
+app.get("/articles/:id/comments", (req, res) => {
+  const articleId = req.params.id;
 
+  db.all(
+    "SELECT comments.*, users.email FROM comments JOIN users ON comments.user_id = users.id WHERE comments.article_id = ?",
+    [articleId],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      res.json(rows);  // 댓글 목록과 함께 사용자 이메일도 반환
+    }
+  );
+});
 
 const bcrypt = require('bcrypt');
 const saltRounds = 10; // 일반적으로 10이면 충분함
